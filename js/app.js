@@ -18,6 +18,8 @@ class HeartbeatApp {
     this.bpmDisplay = document.getElementById('bpm-metric');
     this.fpsDisplay = document.getElementById('fps-metric');
     this.deviceSelect = document.getElementById('camera-select');
+    this.mirrorBtn = document.getElementById('mirror-btn');
+    this.placeholder = document.getElementById('video-placeholder');
     this.terminalLogs = document.getElementById('terminal-logs');
 
     this.detector = new FaceDetector({ modelPath: './models/version-RFB-320.onnx', confThreshold: 0.65 });
@@ -26,6 +28,7 @@ class HeartbeatApp {
 
     this.stream = null;
     this.isRunning = false;
+    this.isMirrored = true;
     this.animationFrameId = null;
     this.isDetecting = false;
     this.lastDetectionTime = 0;
@@ -58,6 +61,14 @@ class HeartbeatApp {
 
   bindEvents() {
     this.startBtn.addEventListener('click', () => this.toggleStream());
+    if (this.mirrorBtn) {
+      this.mirrorBtn.addEventListener('click', () => {
+        this.isMirrored = !this.isMirrored;
+        this.video.classList.toggle('-scale-x-100', this.isMirrored);
+        this.mirrorBtn.classList.toggle('text-emerald-400', this.isMirrored);
+        this.mirrorBtn.classList.toggle('border-emerald-500/50', this.isMirrored);
+      });
+    }
     if (this.deviceSelect) {
       this.deviceSelect.addEventListener('change', () => {
         if (this.isRunning) {
@@ -119,6 +130,10 @@ class HeartbeatApp {
       this.dsp.reset();
       this.detector.resetTracking();
 
+      if (this.placeholder) {
+        this.placeholder.classList.add('hidden');
+      }
+
       this.updateBtnState(true);
       this.setStatus('Tracking Face', 'active');
       this.log('Camera started. Real-time rPPG loop running.', 'success');
@@ -145,6 +160,11 @@ class HeartbeatApp {
 
     this.video.srcObject = null;
     this.renderer.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+
+    if (this.placeholder) {
+      this.placeholder.classList.remove('hidden');
+    }
+
     this.updateBtnState(false);
     this.setStatus('Stopped', 'idle');
     this.log('Session stopped.', 'info');
@@ -217,8 +237,8 @@ class HeartbeatApp {
         }
       }
 
-      // Render canvas overlay
-      this.renderer.render(this.video, this.currentDetection, dspResult);
+      // Render canvas overlay with mirror support
+      this.renderer.render(this.video, this.currentDetection, dspResult, this.isMirrored);
 
       if ('requestVideoFrameCallback' in this.video) {
         this.video.requestVideoFrameCallback(processFrame);

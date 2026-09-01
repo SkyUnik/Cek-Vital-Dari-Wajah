@@ -12,23 +12,47 @@ export class RPPG_Renderer {
   /**
    * Clear and draw all visual elements
    * @param {HTMLVideoElement} videoElement
-   * @param {Object|null} detection - { box, roi, corners }
+   * @param {Object|null} rawDetection - { box, roi, corners }
    * @param {Object} dspData - Output from RPPG_DSP.processFrame
+   * @param {boolean} mirrored - Whether the video display is horizontally mirrored
    */
-  render(videoElement, detection, dspData) {
+  render(videoElement, rawDetection, dspData, mirrored = true) {
     const ctx = this.ctx;
     const width = this.canvas.width;
     const height = this.canvas.height;
 
     ctx.clearRect(0, 0, width, height);
 
-    if (!detection || !detection.box) {
+    if (!rawDetection || !rawDetection.box) {
       // Draw subtle searching overlay if no face is detected
       this.drawSearchingState(width, height);
       return;
     }
 
-    const { box, roi, corners } = detection;
+    // Mirror coordinates if video display is mirrored
+    const box = mirrored
+      ? {
+          x: width - (rawDetection.box.x + rawDetection.box.width),
+          y: rawDetection.box.y,
+          width: rawDetection.box.width,
+          height: rawDetection.box.height
+        }
+      : rawDetection.box;
+
+    const roi = mirrored
+      ? {
+          x: width - (rawDetection.roi.x + rawDetection.roi.width),
+          y: rawDetection.roi.y,
+          width: rawDetection.roi.width,
+          height: rawDetection.roi.height
+        }
+      : rawDetection.roi;
+
+    const corners = (rawDetection.corners || []).map(pt => ({
+      x: mirrored ? width - pt.x : pt.x,
+      y: pt.y
+    }));
+
     const { fps, meanBpm, isReady, filteredSignal, powerSpectrum, bandLowIdx, bandHighIdx, bufferProgress } = dspData;
 
     // 1. Draw Red Bounding Box around Face
@@ -43,7 +67,7 @@ export class RPPG_Renderer {
     ctx.strokeRect(roi.x, roi.y, roi.width, roi.height);
 
     // 3. Draw Green Tracking Crosshairs
-    if (corners && corners.length > 0) {
+    if (corners.length > 0) {
       ctx.strokeStyle = '#22c55e';
       ctx.lineWidth = 1.5;
       for (const pt of corners) {
@@ -97,9 +121,13 @@ export class RPPG_Renderer {
     let displayHeight = box.height / 2.0;
     let displayWidth = box.width * 0.85;
 
-    // Determine horizontal start: to the right of face box if room permits, otherwise anchored on right edge
-    let drawAreaTlX = box.x + box.width + 25;
-    if (drawAreaTlX + displayWidth > canvasWidth - 10) {
+    // Determine horizontal start: place to right of box if space permits, else to left of box
+    let drawAreaTlX;
+    if (box.x + box.width + displayWidth + 25 <= canvasWidth) {
+      drawAreaTlX = box.x + box.width + 25;
+    } else if (box.x - displayWidth - 25 >= 10) {
+      drawAreaTlX = box.x - displayWidth - 25;
+    } else {
       drawAreaTlX = Math.max(10, canvasWidth - displayWidth - 20);
     }
     let drawAreaTlY = Math.max(20, Math.min(canvasHeight - displayHeight * 2 - 20, box.y));
