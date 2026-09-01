@@ -100,11 +100,15 @@ class HeartbeatApp {
         } else if (val === 'facing:user') {
           this.currentFacingMode = 'user';
           this.isMirrored = true;
+        } else if (val.startsWith('device:')) {
+          // If specific back device was chosen
+          const label = this.deviceSelect.options[this.deviceSelect.selectedIndex]?.text.toLowerCase() || '';
+          this.isMirrored = !label.includes('back') && !label.includes('rear') && !label.includes('environment');
         }
         this.video.classList.toggle('-scale-x-100', this.isMirrored);
 
         if (this.isRunning) {
-          this.stopStream().then(() => this.startStream());
+          this.switchCamera();
         }
       });
     }
@@ -128,7 +132,44 @@ class HeartbeatApp {
     this.video.classList.toggle('-scale-x-100', this.isMirrored);
 
     if (this.isRunning) {
-      this.stopStream().then(() => this.startStream());
+      this.switchCamera();
+    }
+  }
+
+  async switchCamera() {
+    if (!this.isRunning) return;
+    this.setStatus('Switching Camera...', 'warning');
+
+    if (this.animationFrameId) {
+      cancelAnimationFrame(this.animationFrameId);
+      this.animationFrameId = null;
+    }
+
+    if (this.stream) {
+      this.stream.getTracks().forEach(track => track.stop());
+      this.stream = null;
+    }
+    this.video.srcObject = null;
+
+    // Critical for iOS Safari: wait 250ms for camera daemon hardware lock release
+    await new Promise(resolve => setTimeout(resolve, 250));
+
+    const constraints = this.getMediaConstraints();
+    try {
+      this.stream = await this.acquireMediaStream(constraints);
+      this.video.srcObject = this.stream;
+      await this.video.play();
+
+      this.dsp.reset();
+      this.detector.resetTracking();
+      this.lastSampleTime = 0;
+      this.setStatus('Tracking Face', 'active');
+      this.log(`Camera active (${this.currentFacingMode === 'environment' ? 'Back' : 'Front'}).`, 'success');
+      this.syncCanvasSize();
+      this.startLoop();
+    } catch (err) {
+      this.log(`Camera switch error: ${err.name || 'Error'} - ${err.message}`, 'error');
+      this.setStatus('Camera Error', 'error');
     }
   }
 
