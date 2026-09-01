@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>rPPG DSP Engine Test Suite</title>
+  <style>
+    body { font-family: monospace; background: #0f172a; color: #f8fafc; padding: 20px; }
+    .pass { color: #22c55e; }
+    .fail { color: #ef4444; }
+    .test-box { background: #1e293b; padding: 15px; border-radius: 8px; margin-bottom: 12px; }
+  </style>
+</head>
+<body>
+  <h2>rPPG DSP Engine Automated Test Suite</h2>
+  <div id="results">Running tests...</div>
+
+  <script type="module">
+    import { RPPG_DSP } from '../js/rppg-dsp.js';
+
+    const resultsDiv = document.getElementById('results');
+    resultsDiv.innerHTML = '';
+
+    function log(msg, isPass) {
+      const p = document.createElement('div');
+      p.className = `test-box ${isPass ? 'pass' : 'fail'}`;
+      p.innerHTML = `${isPass ? '✓ PASS' : '✗ FAIL'}: ${msg}`;
+      resultsDiv.appendChild(p);
+      console.log(isPass ? '[PASS]' : '[FAIL]', msg);
+    }
+
+    async function runTests() {
+      // Test 1: Pentadiagonal detrending & normalization sanity
+      try {
+        const dsp = new RPPG_DSP();
+        const testSignal = new Float64Array([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+        const norm = dsp.normalization(testSignal);
+        const mean = norm.reduce((a, b) => a + b, 0) / norm.length;
+        const passNorm = Math.abs(mean) < 1e-5;
+        log(`Normalization outputs zero mean: mean = ${mean.toFixed(6)}`, passNorm);
+      } catch (e) {
+        log(`Normalization test threw: ${e.message}`, false);
+      }
+
+      // Test 2: Frequency recovery on 72 BPM synthetic signal (1.2 Hz at 30 fps)
+      try {
+        const dsp = new RPPG_DSP({ minSignalSeconds: 5.0, maxSignalSeconds: 5.0 });
+        const fps = 30.0;
+        const durationSec = 6.0;
+        const targetBPM = 72.0;
+        const targetFreq = targetBPM / 60.0; // 1.2 Hz
+        const totalFrames = Math.round(fps * durationSec);
+
+        let finalResult = null;
+        for (let i = 0; i < totalFrames; i++) {
+          const timestamp = (i / fps) * 1000.0;
+          // Synthetic signal with linear drift + low-frequency baseline + 72 BPM pulse
+          const drift = 0.05 * i;
+          const pulse = 10.0 * Math.sin(2 * Math.PI * targetFreq * (i / fps));
+          const meanRGB = { r: 120, g: 150 + drift + pulse, b: 100 };
+          finalResult = dsp.processFrame(meanRGB, timestamp, false);
+        }
+
+        const estimatedBPM = finalResult.bpm;
+        const error = Math.abs(estimatedBPM - targetBPM);
+        const pass72 = error <= 1.5; // within 1.5 BPM of 72
+        log(`Synthetic 72.0 BPM Signal Estimation: Got ${estimatedBPM.toFixed(1)} BPM (Error: ${error.toFixed(2)} BPM)`, pass72);
+      } catch (e) {
+        log(`72 BPM estimation threw: ${e.message}`, false);
+      }
+
+      // Test 3: Frequency recovery on 96 BPM synthetic signal (1.6 Hz at 30 fps)
+      try {
+        const dsp = new RPPG_DSP({ minSignalSeconds: 5.0, maxSignalSeconds: 5.0 });
+        const fps = 30.0;
+        const durationSec = 6.0;
+        const targetBPM = 96.0;
+        const targetFreq = targetBPM / 60.0; // 1.6 Hz
+        const totalFrames = Math.round(fps * durationSec);
+
+        let finalResult = null;
+        for (let i = 0; i < totalFrames; i++) {
+          const timestamp = (i / fps) * 1000.0;
+          const pulse = 15.0 * Math.sin(2 * Math.PI * targetFreq * (i / fps));
+          const meanRGB = { r: 120, g: 140 + pulse, b: 90 };
+          finalResult = dsp.processFrame(meanRGB, timestamp, false);
+        }
+
+        const estimatedBPM = finalResult.bpm;
+        const error = Math.abs(estimatedBPM - targetBPM);
+        const pass96 = error <= 1.5;
+        log(`Synthetic 96.0 BPM Signal Estimation: Got ${estimatedBPM.toFixed(1)} BPM (Error: ${error.toFixed(2)} BPM)`, pass96);
+      } catch (e) {
+        log(`96 BPM estimation threw: ${e.message}`, false);
+      }
+    }
+
+    runTests();
+  </script>
+</body>
+</html>
