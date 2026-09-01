@@ -113,6 +113,16 @@ class HeartbeatApp {
     this.setStatus('Requesting Camera...', 'warning');
     this.log('Requesting webcam access...', 'info');
 
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      const isHttp = window.location.protocol === 'http:' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1';
+      const msg = isHttp
+        ? 'iOS Safari disables camera on insecure HTTP IP. Use HTTPS (GitHub Pages or local HTTPS tunnel).'
+        : 'Camera API (getUserMedia) not supported in this browser context.';
+      this.log(msg, 'error');
+      this.setStatus('Requires HTTPS', 'error');
+      return;
+    }
+
     const deviceId = this.deviceSelect ? this.deviceSelect.value : undefined;
     const constraints = {
       audio: false,
