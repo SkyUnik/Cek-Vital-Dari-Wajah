@@ -11,6 +11,7 @@ export class RPPG_DSP {
     this.samplingFrequency = options.samplingFrequency || 1.0; // Update mean BPM every 1s
     this.lowBPM = options.lowBPM || 42;
     this.highBPM = options.highBPM || 240;
+    this.targetFPS = options.lockedFPS || 30.0; // Strictly standard 30.0 Hz timebase
 
     this.reset();
   }
@@ -27,7 +28,7 @@ export class RPPG_DSP {
     this.bandLowIdx = 0;
     this.bandHighIdx = 0;
 
-    this.fps = 30.0;
+    this.fps = this.targetFPS; // Locked to 30.0 FPS
     this.bpm = 0.0;
     this.meanBpm = 0.0;
     this.minBpm = 0.0;
@@ -48,10 +49,9 @@ export class RPPG_DSP {
     this.t.push(timestamp);
     this.re.push(rescanFlag);
 
-    // Calculate dynamic FPS from timestamps buffer
-    this.fps = this.calculateFPS();
+    this.fps = this.targetFPS; // Enforce locked standard 30.0 FPS
 
-    // Trim buffers to maxSignalSeconds
+    // Trim buffers to maxSignalSeconds (e.g. 5s * 30fps = 150 samples)
     const maxSamples = Math.round(this.fps * this.maxSignalSeconds);
     while (this.s.length > maxSamples && this.s.length > 2) {
       this.s.shift();
@@ -88,14 +88,13 @@ export class RPPG_DSP {
   }
 
   /**
-   * Calculate effective FPS from timestamp buffer
+   * Calculate effective FPS from timestamp buffer (for diagnostics)
    */
   calculateFPS() {
-    if (this.t.length < 2) return 30.0;
+    if (this.t.length < 2) return this.targetFPS;
     const durationSec = (this.t[this.t.length - 1] - this.t[0]) / 1000.0;
-    if (durationSec <= 0) return 30.0;
-    const computedFps = (this.t.length - 1) / durationSec;
-    return Math.max(5.0, Math.min(120.0, computedFps));
+    if (durationSec <= 0) return this.targetFPS;
+    return (this.t.length - 1) / durationSec;
   }
 
   /**

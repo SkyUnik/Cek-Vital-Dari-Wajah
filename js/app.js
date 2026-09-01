@@ -370,6 +370,9 @@ class HeartbeatApp {
   }
 
   startLoop() {
+    const TARGET_FPS = 30.0;
+    const FRAME_INTERVAL = 1000.0 / TARGET_FPS; // 33.333ms
+
     const processFrame = async (now) => {
       if (!this.isRunning) return;
 
@@ -382,14 +385,18 @@ class HeartbeatApp {
         this.detector.detect(this.video).then(detection => {
           this.currentDetection = detection;
           this.isDetecting = false;
-        }).catch(err => {
+        }).catch(() => {
           this.isDetecting = false;
         });
       }
 
-      // Standardize DSP sampling rate to 30 FPS across 60Hz, 120Hz ProMotion iPad, and high-refresh displays
-      const sampleElapsed = now - this.lastSampleTime;
-      if (sampleElapsed >= this.targetSampleInterval - 3) {
+      // Hard lock DSP sampling rate to 30.0 Hz regardless of screen refresh rate (60Hz / 120Hz iPad Pro / 144Hz)
+      if (this.lastSampleTime === 0) {
+        this.lastSampleTime = now;
+      }
+      const elapsed = now - this.lastSampleTime;
+
+      if (elapsed >= FRAME_INTERVAL - 2) {
         this.lastSampleTime = now;
 
         if (this.currentDetection && this.currentDetection.roi) {
@@ -406,12 +413,12 @@ class HeartbeatApp {
               this.bpmDisplay.textContent = '--';
             }
 
-            this.fpsDisplay.textContent = this.lastDspResult.fps.toFixed(1);
+            this.fpsDisplay.textContent = '30.0';
           }
         }
       }
 
-      // Render canvas overlay smoothly on every visual frame
+      // Render canvas overlay smoothly on every visual animation tick
       this.renderer.render(this.video, this.currentDetection, this.lastDspResult, this.isMirrored);
 
       if ('requestVideoFrameCallback' in this.video) {
