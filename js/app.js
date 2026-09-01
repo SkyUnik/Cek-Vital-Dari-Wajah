@@ -37,6 +37,20 @@ class HeartbeatApp {
     this.detectionInterval = 100; // Face detector run interval in ms (tracking smoothly)
     this.currentDetection = null;
 
+    // Standardized 30 FPS sampling controls
+    this.targetFPS = 30.0;
+    this.targetSampleInterval = 1000.0 / this.targetFPS; // 33.33ms
+    this.lastSampleTime = 0;
+    this.lastDspResult = {
+      isReady: false,
+      fps: 30.0,
+      bpm: 0,
+      meanBpm: 0,
+      filteredSignal: [],
+      powerSpectrum: [],
+      bufferProgress: 0
+    };
+
     // Offscreen canvas for sampling ROI pixel data
     this.roiCanvas = document.createElement('canvas');
     this.roiCtx = this.roiCanvas.getContext('2d', { willReadFrequently: true });
@@ -197,6 +211,26 @@ class HeartbeatApp {
     };
   }
 
+  async acquireMediaStream(constraints) {
+    try {
+      return await navigator.mediaDevices.getUserMedia(constraints);
+    } catch (err) {
+      console.warn('Primary camera constraints failed, trying fallback...', err);
+      try {
+        const isBack = this.currentFacingMode === 'environment';
+        return await navigator.mediaDevices.getUserMedia({
+          audio: false,
+          video: {
+            facingMode: isBack ? 'environment' : 'user'
+          }
+        });
+      } catch (err2) {
+        console.warn('FacingMode fallback failed, trying basic video...', err2);
+        return await navigator.mediaDevices.getUserMedia({ audio: false, video: true });
+      }
+    }
+  }
+
   async startStream() {
     this.setStatus('Requesting Camera...', 'warning');
     this.log('Requesting webcam access...', 'info');
@@ -211,16 +245,24 @@ class HeartbeatApp {
       return;
     }
 
+    // Explicit iOS video inline playback flags
+    this.video.setAttribute('playsinline', 'true');
+    this.video.setAttribute('webkit-playsinline', 'true');
+    this.video.setAttribute('muted', 'true');
+    this.video.muted = true;
+    this.video.playsInline = true;
+
     const constraints = this.getMediaConstraints();
 
     try {
-      this.stream = await navigator.mediaDevices.getUserMedia(constraints);
+      this.stream = await this.acquireMediaStream(constraints);
       this.video.srcObject = this.stream;
       await this.video.play();
 
       this.isRunning = true;
       this.dsp.reset();
       this.detector.resetTracking();
+      this.lastSampleTime = 0;
 
       if (this.placeholder) {
         this.placeholder.classList.add('hidden');
@@ -228,7 +270,7 @@ class HeartbeatApp {
 
       this.updateBtnState(true);
       this.setStatus('Tracking Face', 'active');
-      this.log(`Camera active (${this.currentFacingMode === 'environment' ? 'Back' : 'Front'}). rPPG running.`, 'success');
+      this.log(`Camera active (${this.currentFacingMode === 'environment' ? 'Back' : 'Front'}). 30 FPS rPPG locked.`, 'success');
 
       // Refresh device labels once permissions are granted (iOS Safari compatibility)
       await this.loadCameraDevices();
@@ -236,7 +278,7 @@ class HeartbeatApp {
       this.syncCanvasSize();
       this.startLoop();
     } catch (err) {
-      this.log(`Camera access denied: ${err.message}`, 'error');
+      this.log(`Camera error: ${err.name || 'Error'} - ${err.message}`, 'error');
       this.setStatus('Camera Denied', 'error');
     }
   }
@@ -304,36 +346,32 @@ class HeartbeatApp {
         });
       }
 
-      let dspResult = {
-        isReady: false,
-        fps: 0,
-        bpm: 0,
-        meanBpm: 0,
-        filteredSignal: [],
-        powerSpectrum: [],
-        bufferProgress: 0
-      };
+      // Standardize DSP sampling rate to 30 FPS across 60Hz, 120Hz ProMotion iPad, and high-refresh displays
+      const sampleElapsed = now - this.lastSampleTime;
+      if (sampleElapsed >= this.targetSampleInterval - 3) {
+        this.lastSampleTime = now;
 
-      if (this.currentDetection && this.currentDetection.roi) {
-        const roi = this.currentDetection.roi;
+        if (this.currentDetection && this.currentDetection.roi) {
+          const roi = this.currentDetection.roi;
 
-        // Sample mean RGB in forehead ROI
-        const meanRGB = this.sampleROIMean(this.video, roi);
-        if (meanRGB) {
-          dspResult = this.dsp.processFrame(meanRGB, now, false);
+          // Sample mean RGB in forehead ROI
+          const meanRGB = this.sampleROIMean(this.video, roi);
+          if (meanRGB) {
+            this.lastDspResult = this.dsp.processFrame(meanRGB, now, false);
 
-          if (dspResult.isReady && dspResult.meanBpm > 0) {
-            this.bpmDisplay.textContent = dspResult.meanBpm.toFixed(1);
-          } else {
-            this.bpmDisplay.textContent = '--';
+            if (this.lastDspResult.isReady && this.lastDspResult.meanBpm > 0) {
+              this.bpmDisplay.textContent = this.lastDspResult.meanBpm.toFixed(1);
+            } else {
+              this.bpmDisplay.textContent = '--';
+            }
+
+            this.fpsDisplay.textContent = this.lastDspResult.fps.toFixed(1);
           }
-
-          this.fpsDisplay.textContent = dspResult.fps.toFixed(1);
         }
       }
 
-      // Render canvas overlay with mirror support
-      this.renderer.render(this.video, this.currentDetection, dspResult, this.isMirrored);
+      // Render canvas overlay smoothly on every visual frame
+      this.renderer.render(this.video, this.currentDetection, this.lastDspResult, this.isMirrored);
 
       if ('requestVideoFrameCallback' in this.video) {
         this.video.requestVideoFrameCallback(processFrame);

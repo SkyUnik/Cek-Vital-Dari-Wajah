@@ -322,8 +322,21 @@ export class RPPG_DSP {
       }
     }
 
+    // Parabolic sub-bin interpolation for smooth, accurate peak estimation
+    let refinedPeak = peakIdx;
+    if (peakIdx > low && peakIdx < high && peakIdx < spectrum.length - 1) {
+      const a = spectrum[peakIdx - 1];
+      const b = spectrum[peakIdx];
+      const c = spectrum[peakIdx + 1];
+      const denom = a - 2 * b + c;
+      if (Math.abs(denom) > 1e-6) {
+        const delta = 0.5 * (a - c) / denom;
+        refinedPeak = peakIdx + Math.max(-0.5, Math.min(0.5, delta));
+      }
+    }
+
     // Calculate instantaneous BPM
-    this.bpm = (peakIdx * this.fps / N) * 60.0;
+    this.bpm = (refinedPeak * this.fps / N) * 60.0;
     this.bpms.push(this.bpm);
 
     // Update running mean BPM periodically (every 1 / samplingFrequency sec)

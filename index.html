@@ -81,7 +81,7 @@
     <!-- Video & Canvas Container -->
     <div class="relative w-full aspect-[4/3] sm:aspect-video rounded-2xl overflow-hidden glass-panel glow-card bg-slate-900 flex items-center justify-center shadow-2xl">
       <!-- Hidden or Background Video -->
-      <video id="webcam-video" class="absolute inset-0 w-full h-full object-cover -scale-x-100" playsinline muted autoplay></video>
+      <video id="webcam-video" class="absolute inset-0 w-full h-full object-cover -scale-x-100" playsinline webkit-playsinline muted autoplay></video>
       
       <!-- Overlay Canvas for Detection Bounding Box, ROIs & Waveforms (NOT flipped via CSS so text stays readable) -->
       <canvas id="overlay-canvas" class="absolute inset-0 w-full h-full object-cover pointer-events-none"></canvas>
