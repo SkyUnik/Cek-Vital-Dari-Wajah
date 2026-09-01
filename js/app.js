@@ -18,6 +18,7 @@ class HeartbeatApp {
     this.bpmDisplay = document.getElementById('bpm-metric');
     this.fpsDisplay = document.getElementById('fps-metric');
     this.deviceSelect = document.getElementById('camera-select');
+    this.flipBtn = document.getElementById('flip-btn');
     this.mirrorBtn = document.getElementById('mirror-btn');
     this.placeholder = document.getElementById('video-placeholder');
     this.terminalLogs = document.getElementById('terminal-logs');
@@ -28,6 +29,7 @@ class HeartbeatApp {
 
     this.stream = null;
     this.isRunning = false;
+    this.currentFacingMode = 'user'; // 'user' (front) or 'environment' (back)
     this.isMirrored = true;
     this.animationFrameId = null;
     this.isDetecting = false;
@@ -61,6 +63,11 @@ class HeartbeatApp {
 
   bindEvents() {
     this.startBtn.addEventListener('click', () => this.toggleStream());
+
+    if (this.flipBtn) {
+      this.flipBtn.addEventListener('click', () => this.flipCamera());
+    }
+
     if (this.mirrorBtn) {
       this.mirrorBtn.addEventListener('click', () => {
         this.isMirrored = !this.isMirrored;
@@ -69,8 +76,19 @@ class HeartbeatApp {
         this.mirrorBtn.classList.toggle('border-emerald-500/50', this.isMirrored);
       });
     }
+
     if (this.deviceSelect) {
       this.deviceSelect.addEventListener('change', () => {
+        const val = this.deviceSelect.value;
+        if (val === 'facing:environment') {
+          this.currentFacingMode = 'environment';
+          this.isMirrored = false;
+        } else if (val === 'facing:user') {
+          this.currentFacingMode = 'user';
+          this.isMirrored = true;
+        }
+        this.video.classList.toggle('-scale-x-100', this.isMirrored);
+
         if (this.isRunning) {
           this.stopStream().then(() => this.startStream());
         }
@@ -80,21 +98,63 @@ class HeartbeatApp {
     window.addEventListener('resize', () => this.syncCanvasSize());
   }
 
+  flipCamera() {
+    if (this.currentFacingMode === 'user') {
+      this.currentFacingMode = 'environment';
+      this.isMirrored = false;
+      if (this.deviceSelect) this.deviceSelect.value = 'facing:environment';
+      this.log('Switched to Back Camera', 'info');
+    } else {
+      this.currentFacingMode = 'user';
+      this.isMirrored = true;
+      if (this.deviceSelect) this.deviceSelect.value = 'facing:user';
+      this.log('Switched to Front Camera', 'info');
+    }
+
+    this.video.classList.toggle('-scale-x-100', this.isMirrored);
+
+    if (this.isRunning) {
+      this.stopStream().then(() => this.startStream());
+    }
+  }
+
   async loadCameraDevices() {
     if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) return;
     try {
       const devices = await navigator.mediaDevices.enumerateDevices();
       const videoDevices = devices.filter(d => d.kind === 'videoinput');
 
-      if (this.deviceSelect && videoDevices.length > 0) {
+      if (this.deviceSelect) {
+        const currentVal = this.deviceSelect.value;
         this.deviceSelect.innerHTML = '';
-        videoDevices.forEach((device, idx) => {
-          const opt = document.createElement('option');
-          opt.value = device.deviceId;
-          opt.text = device.label || `Camera ${idx + 1}`;
-          this.deviceSelect.appendChild(opt);
-        });
-        this.deviceSelect.classList.remove('hidden');
+
+        // Standard Front/Back facingMode options (essential for iOS Safari / iPadOS)
+        const frontOpt = document.createElement('option');
+        frontOpt.value = 'facing:user';
+        frontOpt.text = 'Front Camera (Selfie)';
+        this.deviceSelect.appendChild(frontOpt);
+
+        const backOpt = document.createElement('option');
+        backOpt.value = 'facing:environment';
+        backOpt.text = 'Back Camera';
+        this.deviceSelect.appendChild(backOpt);
+
+        // Add specific hardware device entries if labels are accessible
+        if (videoDevices.length > 1 && videoDevices.some(d => d.label)) {
+          videoDevices.forEach((device, idx) => {
+            const opt = document.createElement('option');
+            opt.value = `device:${device.deviceId}`;
+            opt.text = device.label || `Camera ${idx + 1}`;
+            this.deviceSelect.appendChild(opt);
+          });
+        }
+
+        // Restore selected value if valid
+        if (currentVal && Array.from(this.deviceSelect.options).some(o => o.value === currentVal)) {
+          this.deviceSelect.value = currentVal;
+        } else {
+          this.deviceSelect.value = this.currentFacingMode === 'environment' ? 'facing:environment' : 'facing:user';
+        }
       }
     } catch (e) {
       console.warn('Camera enumeration error:', e);
@@ -107,6 +167,34 @@ class HeartbeatApp {
     } else {
       await this.startStream();
     }
+  }
+
+  getMediaConstraints() {
+    const selected = this.deviceSelect ? this.deviceSelect.value : '';
+
+    if (selected.startsWith('device:')) {
+      const deviceId = selected.replace('device:', '');
+      return {
+        audio: false,
+        video: {
+          deviceId: { exact: deviceId },
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+          frameRate: { ideal: 30 }
+        }
+      };
+    }
+
+    const isBack = selected === 'facing:environment' || this.currentFacingMode === 'environment';
+    return {
+      audio: false,
+      video: {
+        facingMode: { ideal: isBack ? 'environment' : 'user' },
+        width: { ideal: 1280 },
+        height: { ideal: 720 },
+        frameRate: { ideal: 30 }
+      }
+    };
   }
 
   async startStream() {
@@ -123,13 +211,7 @@ class HeartbeatApp {
       return;
     }
 
-    const deviceId = this.deviceSelect ? this.deviceSelect.value : undefined;
-    const constraints = {
-      audio: false,
-      video: deviceId
-        ? { deviceId: { exact: deviceId }, width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 } }
-        : { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 } }
-    };
+    const constraints = this.getMediaConstraints();
 
     try {
       this.stream = await navigator.mediaDevices.getUserMedia(constraints);
@@ -146,7 +228,10 @@ class HeartbeatApp {
 
       this.updateBtnState(true);
       this.setStatus('Tracking Face', 'active');
-      this.log('Camera started. Real-time rPPG loop running.', 'success');
+      this.log(`Camera active (${this.currentFacingMode === 'environment' ? 'Back' : 'Front'}). rPPG running.`, 'success');
+
+      // Refresh device labels once permissions are granted (iOS Safari compatibility)
+      await this.loadCameraDevices();
 
       this.syncCanvasSize();
       this.startLoop();

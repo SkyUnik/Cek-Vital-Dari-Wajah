@@ -47,15 +47,31 @@
       </div>
     </div>
     
-    <div class="flex items-center gap-2">
-      <select id="camera-select" class="hidden text-xs bg-slate-900 border border-slate-700/80 rounded-lg px-2.5 py-1.5 text-slate-300 focus:outline-none focus:ring-1 focus:ring-emerald-500"></select>
-      <button id="mirror-btn" type="button" title="Toggle Mirror View" class="text-xs bg-slate-900 hover:bg-slate-800 border border-slate-700/80 rounded-lg px-2.5 py-1.5 text-slate-300 flex items-center gap-1">
+    <div class="flex items-center flex-wrap gap-1.5 sm:gap-2 justify-end">
+      <!-- Camera Selection Dropdown -->
+      <select id="camera-select" class="text-xs bg-slate-900 border border-slate-700/80 rounded-lg px-2.5 py-1.5 text-slate-300 focus:outline-none focus:ring-1 focus:ring-emerald-500 max-w-[140px] sm:max-w-[190px] truncate">
+        <option value="facing:user">Front Camera (Selfie)</option>
+        <option value="facing:environment">Back Camera</option>
+      </select>
+
+      <!-- Quick Flip Button (Mobile Friendly) -->
+      <button id="flip-btn" type="button" title="Flip Camera (Front/Back)" class="text-xs bg-slate-900 hover:bg-slate-800 border border-slate-700/80 rounded-lg px-2.5 py-1.5 text-slate-300 flex items-center gap-1 active:scale-95 transition-transform">
+        <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+        </svg>
+        <span class="hidden sm:inline">Flip</span>
+      </button>
+
+      <!-- Mirror Toggle -->
+      <button id="mirror-btn" type="button" title="Toggle Mirror View" class="text-xs bg-slate-900 hover:bg-slate-800 border border-slate-700/80 rounded-lg px-2.5 py-1.5 text-slate-300 flex items-center gap-1 active:scale-95 transition-transform">
         <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
         </svg>
-        <span>Mirror</span>
+        <span class="hidden sm:inline">Mirror</span>
       </button>
-      <span id="status-badge" class="px-3 py-1 text-xs font-mono font-medium rounded-full border bg-slate-800 text-slate-400 border-slate-700">Loading...</span>
+
+      <!-- Status Badge -->
+      <span id="status-badge" class="px-2.5 py-1 text-xs font-mono font-medium rounded-full border bg-slate-800 text-slate-400 border-slate-700">Loading...</span>
     </div>
   </header>
 
