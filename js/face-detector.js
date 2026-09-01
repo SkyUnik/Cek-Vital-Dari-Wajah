@@ -29,7 +29,10 @@ export class FaceDetector {
 
     try {
       if (ort.env && ort.env.wasm) {
-        ort.env.wasm.wasmPaths = './js/vendor/';
+        const vendorBase = typeof window !== 'undefined'
+          ? new URL('./js/vendor/', window.location.href).href
+          : './js/vendor/';
+        ort.env.wasm.wasmPaths = vendorBase;
         ort.env.wasm.numThreads = Math.min(4, navigator.hardwareConcurrency || 2);
       }
 
